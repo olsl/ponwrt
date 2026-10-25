@@ -70,7 +70,18 @@ jobs:
         run: make download -j"$(nproc)"
 
       - name: Build
-        run: make -j"$(nproc)"
+        run: |
+          make V=s -j"$(nproc)" 2>&1 | tee build.log | tail -200
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Pack
         run: |
