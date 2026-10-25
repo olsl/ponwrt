@@ -376,7 +376,12 @@ define Device/nokia_xg-040g-md-common
     kmod-phy-airoha-en8811h kmod-regulator-userspace-consumer \
     kmod-usb-ledtrig-usbport kmod-usb3 kmod-airoha-en7572 \
     kmod-airoha-xpon airoha-ponctl airoha-pond \
-    $(AIROHA_USB_STORAGE_PACKAGES)
+    $(AIROHA_USB_STORAGE_PACKAGES) \
+    kmod-usb-net kmod-usb-net-rndis kmod-usb-net-cdc-ether \
+    kmod-usb-net-cdc-ncm kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan \
+    kmod-usb-net-ipheth kmod-usb-serial-option \
+    usb-modeswitch uqmi \
+    kmod-mac80211 kmod-rtl8xxxu
 endef
 
 define Device/nokia_xg-040g-tf-common
