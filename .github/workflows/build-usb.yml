@@ -71,7 +71,8 @@ jobs:
 
       - name: Prebuild libffi (python3 _ctypes needs ffi.h in target sysroot)
         run: |
-          make package/feeds/packages/libffi/compile -j"$(nproc)"
+          make package/feeds/packages/libffi/compile V=s -j"$(nproc)" 2>&1 | tee build-libffi.log | tail -100
+          exit ${PIPESTATUS[0]}
 
       - name: Build
         run: |
@@ -83,7 +84,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: |
+            build.log
+            build-libffi.log
           if-no-files-found: warn
           retention-days: 7
 
