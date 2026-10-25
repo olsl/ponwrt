@@ -69,6 +69,10 @@ jobs:
       - name: Download sources
         run: make download -j"$(nproc)"
 
+      - name: Prebuild libffi (python3 _ctypes needs ffi.h in target sysroot)
+        run: |
+          make package/feeds/packages/libffi/compile -j"$(nproc)"
+
       - name: Build
         run: |
           make V=s -j"$(nproc)" 2>&1 | tee build.log | tail -200
