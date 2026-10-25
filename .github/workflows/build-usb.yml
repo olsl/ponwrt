@@ -72,6 +72,7 @@ jobs:
       - name: Prebuild libffi (python3 _ctypes needs ffi.h in target sysroot)
         run: |
           make tools/install V=s -j"$(nproc)" 2>&1 | tail -80
+          make toolchain/install V=s -j"$(nproc)" 2>&1 | tail -80
           make package/libs/libffi/compile V=s -j"$(nproc)" 2>&1 | tee build-libffi.log | tail -100
           exit ${PIPESTATUS[0]}
 
