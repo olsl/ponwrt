@@ -1,0 +1,130 @@
+name: Build PonWrt Nokia XG-040G-MD (an7581)
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Build label
+        required: false
+        default: nokia-md-ubi
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-nokia-md
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build an7581 Nokia XG-040G-MD UBI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Free build space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk \
+            gettext git g++-multilib gcc-multilib gperf help2man intltool \
+            libelf-dev libffi-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+            libmpc-dev libmpfr-dev libncurses-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev lld llvm ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply python3-pyelftools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+            uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: ponwrt-dl-nokiamd-${{ hashFiles('feeds.conf.default', 'configs/*.config') }}
+          restore-keys: |
+            ponwrt-dl-nokiamd-
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure an7581 (Nokia XG-040G-MD UBI only)
+        run: |
+          ./scripts/kconfig.pl + \
+            "configs/an7581.config" \
+            configs/release.config > .config
+          # Keep only the nokia_xg-040g-md-ubi device; disable every other profile.
+          awk '
+            /^CONFIG_TARGET_DEVICE_PACKAGES_airoha_an7581_DEVICE_/ { next }
+            /^CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_/ {
+              dev=$0
+              sub(/^CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_/, "", dev)
+              sub(/=.*/, "", dev)
+              if (dev == "nokia_xg-040g-md-ubi") {
+                print "CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_"dev"=y"
+              } else {
+                print "# CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_"dev" is not set"
+              }
+              next
+            }
+            { print }
+          ' .config > .config.tmp && mv .config.tmp .config
+          make defconfig
+          echo "=== selected target device ==="
+          grep "TARGET_DEVICE_airoha_an7581_DEVICE_" .config | grep -v PACKAGES
+
+      - name: Download sources
+        run: make download -j"$(nproc)"
+
+      - name: Prebuild libffi (python3 _ctypes needs ffi.h in target sysroot)
+        run: |
+          make tools/install V=s -j"$(nproc)" 2>&1 | tail -80
+          make toolchain/install V=s -j"$(nproc)" 2>&1 | tail -80
+          make package/libs/libffi/compile V=s -j"$(nproc)" 2>&1 | tee build-libffi.log | tail -100
+          exit ${PIPESTATUS[0]}
+
+      - name: Build
+        run: |
+          make V=s -j"$(nproc)" 2>&1 | tee build.log | tail -200
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            build-libffi.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Pack
+        run: |
+          mkdir release
+          ITBS=$(ls bin/targets/airoha/an7581/*.itb 2>/dev/null \
+            | grep 'nokia_xg-040g-md-ubi-' | grep -v 'usb-sfp' | xargs -r -n1 basename)
+          echo "packing itb: $ITBS"
+          test -n "$ITBS"
+          tar --zstd -cf "release/ponwrt-an7581-nokia-md-ubi.tar.zst" \
+            -C bin/targets/airoha/an7581 $ITBS \
+            sha256sums ponwrt-airoha-an7581.manifest profiles.json
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ponwrt-an7581-nokia-md-ubi
+          path: release/*.tar.zst
+          if-no-files-found: error
+          retention-days: 14
